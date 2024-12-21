@@ -10,6 +10,10 @@
 #include "../include/Texture.h"
 #include "../include/Text.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 using namespace std;
 
 // Global variables
@@ -41,6 +45,12 @@ bool firstMouse = true;
 float yaw = -90.0f;
 float pitch = 0.0f;
 
+// Add basket constants after other global variables
+const float BASKET_RADIUS = 0.5f;
+const float BASKET_HEIGHT = 0.4f;
+const int BASKET_SEGMENTS = 32;
+Vector3 basketPosition(0.0f, 1.0f, 0.0f);  // Position of the basket
+
 // Function declarations
 void init();
 void display();
@@ -54,6 +64,7 @@ void mouseMotion(int x, int y);
 void createGround();
 void checkCollisions();
 void processKeys();
+void drawBasket();
 
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
@@ -83,8 +94,12 @@ int main(int argc, char** argv) {
 void init() {
     glClearColor(0.9f, 0.9f, 0.9f, 1.0f);
     glEnable(GL_DEPTH_TEST);
+    
+    // Enable lighting after setting up the window
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
+    glEnable(GL_COLOR_MATERIAL);
+    glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
 
     // Set up lighting
     GLfloat lightPosition[] = { 0.0f, 10.0f, 0.0f, 1.0f };
@@ -98,6 +113,9 @@ void init() {
     camera.PositionCamera(0.0f, 2.0f, 6.0f,   // Position
                          0.0f, 0.0f, 0.0f,   // View
                          0.0f, 1.0f, 0.0f);  // Up vector
+
+    // Initialize random seed
+    srand(time(NULL));
 
     // Initialize fruits
     for (int i = 0; i < 5; ++i) {
@@ -116,6 +134,9 @@ void display() {
     glDisable(GL_TEXTURE_2D);
     glColor3f(0.5f, 0.5f, 0.5f);  // Gray color for ground
     createGround();
+
+    // Draw basket
+    drawBasket();
 
     // Draw fruits
     for (auto& fruit : fruits) {
@@ -151,6 +172,17 @@ void update() {
 
     // Process keyboard input
     processKeys();
+
+    // Update basket position to follow player
+    Vector3 forward = camera.m_vView - camera.m_vPosition;
+    forward.y = 0;  // Keep it in horizontal plane
+    forward.Normalize();
+    forward = forward * 0.7f;  // Place basket 0.7 units in front of player
+    
+    // Update basket position
+    basketPosition.x = camera.m_vPosition.x + forward.x;
+    basketPosition.z = camera.m_vPosition.z + forward.z;
+    basketPosition.y = camera.m_vPosition.y + 0.1f;  // Place basket slightly above eye level
 
     // Update fruits
     for (auto& fruit : fruits) {
@@ -229,7 +261,7 @@ void mouseMotion(int x, int y) {
     lastMouseX = x;
     lastMouseY = y;
 
-    float sensitivity = 0.1f;
+    float sensitivity = 0.05f;
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
@@ -282,8 +314,32 @@ void checkCollisions() {
     for (auto& fruit : fruits) {
         if (fruit.IsActive()) {
             Vector3 fruitPos = fruit.GetPosition();
-            float dx = fruitPos.x - cameraPos.x;
-            float dz = fruitPos.z - cameraPos.z;
+            
+            // Check if fruit is above basket
+            float dx = fruitPos.x - basketPosition.x;
+            float dz = fruitPos.z - basketPosition.z;
+            float distanceToBasket = sqrt(dx * dx + dz * dz);
+            
+            // If fruit is within basket radius and at right height
+            if (distanceToBasket < BASKET_RADIUS && 
+                fruitPos.y < basketPosition.y + BASKET_HEIGHT && 
+                fruitPos.y > basketPosition.y) {
+                int points = fruit.GetPoints();
+                score += points;  // Add points based on fruit type
+                if (points < 0) {
+                    life--;
+                    if (life <= 0) {
+                        cout << "Game Over! Final Score: " << score << endl;
+                        exit(0);
+                    }
+                }
+                fruit.SetActive(false);
+                continue;  // Skip player collision check for caught fruits
+            }
+            
+            // Check player collision
+            dx = fruitPos.x - cameraPos.x;
+            dz = fruitPos.z - cameraPos.z;
             float distance = sqrt(dx * dx + dz * dz);
 
             if (distance < CATCH_DISTANCE && fruitPos.y < cameraPos.y + 2.0f) {
@@ -300,4 +356,60 @@ void checkCollisions() {
             }
         }
     }
+}
+
+void drawBasket() {
+    glPushMatrix();
+    glTranslatef(basketPosition.x, basketPosition.y, basketPosition.z);
+    
+    // Enable blending for transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    // Set material properties for the basket - semi-transparent brown
+    glColor4f(0.8f, 0.4f, 0.0f, 0.6f);  // Brown color with 60% opacity
+    
+    // Draw the basket rim
+    glBegin(GL_TRIANGLE_STRIP);
+    for (int i = 0; i <= BASKET_SEGMENTS; i++) {
+        float angle = (float)i / BASKET_SEGMENTS * 2.0f * M_PI;
+        float x = cos(angle) * BASKET_RADIUS;
+        float z = sin(angle) * BASKET_RADIUS;
+        
+        // Outer vertex
+        glNormal3f(x, 0.0f, z);
+        glVertex3f(x, BASKET_HEIGHT, z);
+        
+        // Inner vertex
+        glVertex3f(x * 0.8f, BASKET_HEIGHT, z * 0.8f);
+    }
+    glEnd();
+    
+    // Draw the basket sides
+    glBegin(GL_QUAD_STRIP);
+    for (int i = 0; i <= BASKET_SEGMENTS; i++) {
+        float angle = (float)i / BASKET_SEGMENTS * 2.0f * M_PI;
+        float x = cos(angle) * BASKET_RADIUS;
+        float z = sin(angle) * BASKET_RADIUS;
+        
+        glNormal3f(x, 0.0f, z);
+        glVertex3f(x, BASKET_HEIGHT, z);
+        glVertex3f(x, 0.0f, z);
+    }
+    glEnd();
+    
+    // Draw the bottom
+    glBegin(GL_TRIANGLE_FAN);
+    glNormal3f(0.0f, -1.0f, 0.0f);
+    glVertex3f(0.0f, 0.0f, 0.0f);  // Center point
+    for (int i = 0; i <= BASKET_SEGMENTS; i++) {
+        float angle = (float)i / BASKET_SEGMENTS * 2.0f * M_PI;
+        float x = cos(angle) * BASKET_RADIUS;
+        float z = sin(angle) * BASKET_RADIUS;
+        glVertex3f(x, 0.0f, z);
+    }
+    glEnd();
+    
+    glDisable(GL_BLEND);  // Disable blending after drawing the basket
+    glPopMatrix();
 } 
