@@ -3,8 +3,11 @@
 #include <ctime>
 #include <cmath>
 
-Fruit::Fruit(const Vector3& pos) : m_position(pos), m_active(true), m_time(0) {
-    ResetRandomFruit(pos.y);
+// 假設全域變量已在 main.cpp 中定義
+extern float fruitSpeedMultiplier;
+
+Fruit::Fruit(const Vector3& pos) : m_position(pos), m_active(true), m_time(0), m_isRainbow(false), m_points(0) {
+    ResetRandomFruit(pos.y, 0.0f); // 初始遊戲時間設為 0.0f
 }
 
 void Fruit::Draw() {
@@ -32,57 +35,64 @@ void Fruit::Draw() {
 void Fruit::Update(float deltaTime) {
     if (!m_active) return;
 
-    m_position.y -= m_speed * deltaTime;
+    m_position.y -= m_speed * fruitSpeedMultiplier * deltaTime;
 
     if (m_position.y < -1.0f) {
         m_active = false;
     }
 }
 
-void Fruit::ResetRandomFruit(float height) {
+void Fruit::ResetRandomFruit(float height, float gameTime) {
+    // 設置隨機種子
     static bool seeded = false;
     if (!seeded) {
         srand(static_cast<unsigned>(time(nullptr)));
         seeded = true;
     }
 
-    m_position.x = (rand() % 50 - 25) * 1.0f;  // Random x between -25 and 25
+    // 設置水果的位置
+    m_position.x = (rand() % 50 - 25) * 1.0f;  // 隨機 x 介於 -25 和 25
     m_position.y = height;
-    m_position.z = (rand() % 40 - 20) * 1.0f;  // Random z between -20 and 20
+    m_position.z = (rand() % 40 - 20) * 1.0f;  // 隨機 z 介於 -20 和 20
 
-    float chance = static_cast<float>(rand()) / RAND_MAX;
-    if (chance < 0.1f) { // Rainbow ball (10%)
-        m_color = Vector3(1.0f, 1.0f, 1.0f);
-        m_size = 0.3f;
-        m_points = 10;
-        m_isRainbow = true;
-    }
-    else if (chance < 0.2f) { // Black ball (10%)
-        m_color = Vector3(0.0f, 0.0f, 0.0f);
-        m_size = 2.0f;
-        m_points = -10;
-        m_isRainbow = false;
-    }
-    else if (chance < 0.4f) { // Blue ball (20%)
-        m_color = Vector3(0.0f, 0.0f, 1.0f);
-        m_size = 0.5f;
-        m_points = 5;
-        m_isRainbow = false;
-    }
-    else if (chance < 0.7f) { // Green ball (30%)
-        m_color = Vector3(0.0f, 1.0f, 0.0f);
-        m_size = 1.0f;
-        m_points = 3;
-        m_isRainbow = false;
-    }
-    else { // Red ball (30%)
-        m_color = Vector3(1.0f, 0.0f, 0.0f);
-        m_size = 1.5f;
+    // 根據遊戲時間決定水果的類型
+    if (gameTime <= 60.0f) {
+        // 前 80 秒：紅球
+        m_color = Vector3(1.0f, 0.0f, 0.0f); // 紅色
+        m_size = 0.5f; // 設定適當的大小
         m_points = 1;
         m_isRainbow = false;
     }
+    else if (gameTime <= 100.0f) {
+        // 81-110 秒：黃球
+        m_color = Vector3(1.0f, 1.0f, 0.0f); // 黃色
+        m_size = 0.7f; // 設定適當的大小
+        m_points = 2;
+        m_isRainbow = false;
+    }
+    else if (gameTime <= 120.0f) {
+        // 111-120 秒：彩色球
+        // 隨機選擇一種顏色
+        float chance = static_cast<float>(rand()) / RAND_MAX;
+        if (chance < 0.25f) {
+            m_color = Vector3(1.0f, 0.0f, 0.0f); // 紅色
+        }
+        else if (chance < 0.5f) {
+            m_color = Vector3(0.0f, 1.0f, 0.0f); // 綠色
+        }
+        else if (chance < 0.75f) {
+            m_color = Vector3(0.0f, 0.0f, 1.0f); // 藍色
+        }
+        else {
+            m_color = Vector3(1.0f, 0.0f, 1.0f); // 紫色
+        }
+        m_size = 1.0f; // 設定適當的大小
+        m_points = 10;
+        m_isRainbow = true; // 啟用彩虹效果
+    }
 
-    m_speed = 5.0f + static_cast<float>(rand() % 30) / 10.0f;  // Speed between 5 and 8
+    // 設定速度（根據需要調整）
+    m_speed = 5.0f + static_cast<float>(rand() % 30) / 10.0f;  // Speed between 5.0 and 8.0
     m_active = true;
 }
 
@@ -91,4 +101,4 @@ void Fruit::DrawSphere() {
     gluQuadricDrawStyle(quadric, GLU_FILL);
     gluSphere(quadric, m_size, 32, 32);
     gluDeleteQuadric(quadric);
-} 
+}
