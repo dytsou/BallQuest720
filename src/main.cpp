@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
-#include <iomanip>    // 為了使用 std::fixed 和 std::setprecision
+#include <iomanip>
 #include <GL/glut.h>
 #include "../include/Camera.h"
 #include "../include/Fruit.h"
@@ -18,44 +18,41 @@
 
 using namespace std;
 
-// ========================== 全域參數宣告 ========================== //
-
-// 視窗大小
+// Global parameters
 const int WINDOW_WIDTH  = 1280;
 const int WINDOW_HEIGHT = 720;
 
-// 地面與牆面
+// Ground and walls
 const float GROUND_SIZE = 50.0f;
 const float GROUND_Y    = 0.0f;
-const float WALL_HEIGHT = 30.0f;  // 增加牆壁高度
-const float WALL_DISTANCE = GROUND_SIZE;  // 牆的位置（與地面邊緣相同）
-CTexture wallTexture;                     // 牆面紋理
+const float WALL_HEIGHT = 30.0f;
+const float WALL_DISTANCE = GROUND_SIZE;
+CTexture wallTexture;
 
-// 攝影機
+// Camera
 CCamera camera;
 
-// HUD & 分數
+// HUD & Score
 Text    scoreText;
 int     score = 0;
-int     life  = 20;  // 初始生命
+int     life  = 20;
 
-// 水果相關
-const int  BallHeight = 50;  // 水果重置時離地高度
-const int  Interval   = 20;  // 未使用，可自行擴
+// Fruit related
+const int  BallHeight = 50;
+const int  Interval   = 20;
 
-// 籃子 (使用 code2 較複雜的編織籃子)
+// Basket
 const float BASKET_RADIUS   = 0.1f;
 const float BASKET_HEIGHT   = 0.1f;
 const int   BASKET_SEGMENTS = 32;
-Vector3 basketPosition(0.0f, 1.0f, 0.0f); // 籃子位置
+Vector3 basketPosition(0.0f, 1.0f, 0.0f);
 
-// 得分區域與環相關
-const float CATCH_DISTANCE = 0.8f;        // 得分區域半徑
-const float RING_RADIUS = CATCH_DISTANCE;  // 環半徑與得分區域相同
-const int   RING_SEGMENTS = 50;           // 得分環段數
-bool isScoring = false;                   // 是否正在得分
+// Ring and scoring area
+const float CATCH_DISTANCE = 0.8f;
+const float RING_RADIUS = CATCH_DISTANCE;
+const int   RING_SEGMENTS = 50;
 
-// 滑鼠、鍵盤輸入
+// Mouse and keyboard input
 bool keyStates[256] = {false};
 bool specialKeyStates[256] = {false};
 int  lastMouseX = WINDOW_WIDTH / 2;
@@ -64,7 +61,7 @@ bool firstMouse = true;
 float yaw   = -90.0f;
 float pitch = 0.0f;
 
-// 遊戲狀態 & 難度選擇
+// Game state & difficulty
 enum GameState {
     MENU,
     PLAYING,
@@ -72,40 +69,43 @@ enum GameState {
 };
 enum Difficulty {
     EASY,
-    NORMAL,
+    MEDIUM,
     HARD
 };
 
-// 與選單相關的按鈕結構
+// Menu button structure
 struct Button {
     float x, y, width, height;
     string text;
     bool isHovered;
 };
 
-// 選單按鈕
+// Menu buttons
 vector<Button> difficultyButtons = {
     {WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2 - 80, 200, 50, "Easy",   false},
-    {WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2,      200, 50, "Normal", false},
+    {WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2,      200, 50, "Medium", false},
     {WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2 + 80, 200, 50, "Hard",   false}
 };
 
 GameState   currentState        = MENU;
-Difficulty  selectedDifficulty  = NORMAL;
+Difficulty  selectedDifficulty  = MEDIUM;
 
-// ============ 以下為 code2 的計時機制與參數調整功能 ============ //
+// Game timing and parameters
+float gameTime          = 0.0f;
+const float GAME_DURATION = 120.0f;
+float gameOverStartTime = 0.0f;
 
-// 遊戲時間
-float gameTime          = 0.0f;         // 已經過的時間（秒）
-const float GAME_DURATION = 120.0f;     // 總時長（秒）
-float gameOverStartTime = 0.0f;         // 記錄遊戲結束的時間點
+// Speed and sensitivity parameters
+float cameraSpeed         = 0.1f;
+float mouseSensitivity    = 0.05f;
+float fruitSpeedMultiplier = 1.0f;
 
-// 速度、靈敏度���可調參數
-float cameraSpeed         = 0.1f; // 攝影機移動速度
-float mouseSensitivity    = 0.05f; // 滑鼠視角旋轉靈敏度（合併時取 code1 的 0.05f 與 code2 的 0.01f 中間值）
-float fruitSpeedMultiplier = 1.0f; // 水果下落速度倍增器
+// Explosion effect
+float explosionTime = 0.0f;
+bool isExploding = false;
+const float EXPLOSION_DURATION = 2.0f;
 
-// ========================== 函式宣告 ========================== //
+// Function declarations
 void init();
 void display();
 void reshape(int w, int h);
@@ -126,39 +126,32 @@ void processKeys();
 void checkCollisions();
 void drawRing();
 
-// ========================== 全域水果容器 ========================== //
-
-// 主要水果和黑球的容器
+// Global fruit containers
 vector<Fruit> mainFruits;
 vector<Fruit> blackFruits;
 
-// 初始化水果
+// Initialize fruits with default positions
 void InitializeFruits() {
-    // 初始生成一定數量的主要水果和黑球
-    for (int i = 0; i < 5; ++i) { // 可根據難度調整
+    // Generate initial main fruits
+    for (int i = 0; i < 5; ++i) {
         Vector3 pos(0.0f, 0.0f, 0.0f);
         mainFruits.emplace_back(pos, FruitType::MAIN);
     }
-    for (int i = 0; i < 3; ++i) { // 可根據難度調整
+    // Generate initial black balls
+    for (int i = 0; i < 3; ++i) {
         Vector3 pos(0.0f, 0.0f, 0.0f);
         blackFruits.emplace_back(pos, FruitType::BLACK);
     }
 }
 
-// ========================== 主函式 ========================== //
-
-int main(int argc, char** argv) {
+void initializeGLUT(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
     glutCreateWindow("BallQuest 720");
+}
 
-    init();
-
-    // 初始化水果
-    InitializeFruits();
-
-    // 設定 callback
+void setupCallbacks() {
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutKeyboardFunc(keyboard);
@@ -167,30 +160,41 @@ int main(int argc, char** argv) {
     glutMouseFunc(mouse);
     glutPassiveMotionFunc(passiveMotion);
     glutIdleFunc(update);
-
-    // 選單狀態下顯示滑鼠指標
-    glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
-
-    glutMainLoop();
-    return 0;
 }
 
-// ========================== 初始化相關 ========================== //
+int main(int argc, char** argv) {
+    // Initialize GLUT and create window
+    initializeGLUT(argc, argv);
+
+    // Initialize OpenGL settings and game state
+    init();
+
+    // Initialize game objects
+    InitializeFruits();
+
+    // Set up callback functions
+    setupCallbacks();
+
+    // Show cursor in menu
+    glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
+
+    // Start game loop
+    glutMainLoop();
+    
+    return 0;
+}
 
 void init() {
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
 
-    // 載入牆面紋理
     wallTexture.LoadTexture("../textures/wall.bmp");
 
-    // 啟用照明
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
     glEnable(GL_COLOR_MATERIAL);
     glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
 
-    // 設定光源
     GLfloat lightPosition[] = { 0.0f, 10.0f, 0.0f, 1.0f };
     GLfloat lightAmbient[]  = { 0.2f, 0.2f, 0.2f, 1.0f };
     GLfloat lightDiffuse[]  = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -198,22 +202,17 @@ void init() {
     glLightfv(GL_LIGHT0, GL_AMBIENT,  lightAmbient);
     glLightfv(GL_LIGHT0, GL_DIFFUSE,  lightDiffuse);
 
-    // 初始化攝影機
     camera.PositionCamera(
-        0.0f, 2.0f, 6.0f,   // 位置
-        0.0f, 0.0f, 0.0f,   // View
-        0.0f, 1.0f, 0.0f    // Up
+        0.0f, 2.0f, 6.0f,
+        0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f
     );
-
-    // 初始化亂數
+    
     srand(static_cast<unsigned>(time(nullptr)));
 
-    // 預設遊戲時間歸零
     gameTime          = 0.0f;
     gameOverStartTime = 0.0f;
 }
-
-// ========================== 視窗與顯示相關 ========================== //
 
 void reshape(int w, int h) {
     if (h == 0) h = 1;
@@ -228,23 +227,19 @@ void reshape(int w, int h) {
 
 void display() {
     if (currentState == MENU) {
-        // 選單畫面
         drawMenu();
         return;
     }
     else if (currentState == GAMEOVER) {
-        // GAMEOVER 畫面
         glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glLoadIdentity();
 
-        // 顯示「Game Over」與最終分數
         glDisable(GL_LIGHTING);
         glColor3f(1.0f, 0.0f, 0.0f);
         string gameOverText    = "Game Over";
         string finalScoreText  = "Final Score: " + to_string(score);
 
-        // 在螢幕中央顯示
         scoreText.RenderText(WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2,     gameOverText);
         glColor3f(1.0f, 1.0f, 1.0f);
         scoreText.RenderText(WINDOW_WIDTH / 2 - 80, WINDOW_HEIGHT / 2 - 40, finalScoreText);
@@ -253,39 +248,30 @@ void display() {
         return;
     }
 
-    // 否則就是 PLAYING 中
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);  // code1 原本設定白色背景
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
     camera.Look();
 
-    // 繪地面與四面牆
     createGroundAndWalls();
-
-    // 繪製籃子
     drawRing();
 
-    // 繪製主要水果
     for (auto& fruit : mainFruits) {
         fruit.Draw();
     }
 
-    // 繪製黑球
     for (auto& fruit : blackFruits) {
         fruit.Draw();
     }
 
-    // 繪製 HUD（分數、生命、剩餘時間）
     glDisable(GL_LIGHTING);
     glColor3f(0.0f, 0.0f, 0.0f);
 
-    // 分數與生命
     stringstream ss;
     ss << "Score: " << score << "  Life: " << life;
     scoreText.RenderText(10, 30, ss.str());
 
-    // 剩餘時間
     float remainingTime = GAME_DURATION - gameTime;
     if (remainingTime < 0.0f) remainingTime = 0.0f;
     stringstream timeSS;
@@ -294,10 +280,45 @@ void display() {
 
     glEnable(GL_LIGHTING);
 
+    if (isExploding) {
+        glDisable(GL_LIGHTING);
+        glDisable(GL_DEPTH_TEST);
+        
+        float alpha = 1.0f - (explosionTime / EXPLOSION_DURATION);
+        if (alpha < 0.0f) alpha = 0.0f;
+        
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glColor4f(0.0f, 0.0f, 0.0f, alpha);
+        
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        glOrtho(0, WINDOW_WIDTH, WINDOW_HEIGHT, 0, -1, 1);
+        
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
+        
+        glBegin(GL_QUADS);
+            glVertex2f(0, 0);
+            glVertex2f(WINDOW_WIDTH, 0);
+            glVertex2f(WINDOW_WIDTH, WINDOW_HEIGHT);
+            glVertex2f(0, WINDOW_HEIGHT);
+        glEnd();
+        
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
+        
+        glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_LIGHTING);
+    }
+
     glutSwapBuffers();
 }
-
-// ========================== 遊戲流程、更新邏輯 ========================== //
 
 void update() {
     static float lastTime = 0.0f;
@@ -305,33 +326,28 @@ void update() {
     float deltaTime   = currentTime - lastTime;
     lastTime          = currentTime;
 
-    if (currentState == MENU) {
-        // 若在選單中只要不斷重繪
-        glutPostRedisplay();
-        return;
-    }
-    else if (currentState == GAMEOVER) {
-        // 等待顯示一段���間或自行退出
-        // 不要自動結束，可在此判斷
+    if (currentState == MENU || currentState == GAMEOVER) {
         glutPostRedisplay();
         return;
     }
 
-    // ============= 以下為 PLAYING 狀態下的更新邏輯 ============= //
+    if (isExploding) {
+        explosionTime += deltaTime;
+        if (explosionTime >= EXPLOSION_DURATION) {
+            isExploding = false;
+            explosionTime = 0.0f;
+        }
+    }
 
-    // 更新遊戲計時
     gameTime += deltaTime;
     if (gameTime >= GAME_DURATION) {
-        // 時間到 -> 切換到 GAMEOVER
         currentState       = GAMEOVER;
         gameOverStartTime  = currentTime;
         return;
     }
 
-    // 處理鍵盤輸入 (WASD 等)
     processKeys();
 
-    // 更新籃子位置 (跟隨玩家視線方向前方 0.7f)
     Vector3 forward = camera.m_vView - camera.m_vPosition;
     forward.y = 0;
     forward.Normalize();
@@ -341,27 +357,22 @@ void update() {
     basketPosition.z = camera.m_vPosition.z + forward.z;
     basketPosition.y = camera.m_vPosition.y + 0.1f;
 
-    // 更新主要水果
     for (auto& fruit : mainFruits) {
         fruit.Update(deltaTime * fruitSpeedMultiplier); 
     }
 
-    // 更新黑球
     for (auto& fruit : blackFruits) {
         fruit.Update(deltaTime * fruitSpeedMultiplier); 
     }
 
-    // 檢查碰撞
     checkCollisions();
 
-    // 重置不活躍的主要水果
     for (auto& fruit : mainFruits) {
         if (!fruit.IsActive()) {
             fruit.ResetRandomFruit(BallHeight, gameTime, FruitType::MAIN); 
         }
     }
 
-    // 重置不活躍的黑球
     for (auto& fruit : blackFruits) {
         if (!fruit.IsActive()) {
             fruit.ResetRandomFruit(BallHeight, gameTime, FruitType::BLACK); 
@@ -371,39 +382,39 @@ void update() {
     glutPostRedisplay();
 }
 
-// ========================== 選單相關 ========================== //
 
 void drawMenu() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
-    // 設定色背景
+    // Set background color
     glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // 標題與說明文字
+    // Title and instruction text
     const int charWidth = 15;
     string titleText    = "Select Difficulty";
     string instructText1= "Use WASD to move, Mouse to look around";
     string instructText2= "Press Q to quit game";
+    string instructText3= "Press Z to end game and show score";
 
     int titleWidth   = titleText.size()    * charWidth;
     int instruct1Width = instructText1.size() * charWidth;
     int instruct2Width = instructText2.size() * charWidth;
+    int instruct3Width = instructText3.size() * charWidth;
 
     glDisable(GL_LIGHTING);
-    glColor3f(0.9f, 0.9f, 0.9f);  // 標題顏色
+    glColor3f(0.9f, 0.9f, 0.9f);  // Title color
     scoreText.RenderText(WINDOW_WIDTH/2 - titleWidth/2 + 55, WINDOW_HEIGHT/3 - 10, titleText);
-
-    // 繪製按鈕
     for (const auto& btn : difficultyButtons) {
         drawButton(btn);
     }
 
-    // 繪製說明文字（黃色）
+    // Draw instruction text (yellow)
     glColor3f(1.0f, 1.0f, 0.0f);
-    scoreText.RenderText(WINDOW_WIDTH/2 - instruct1Width/2 + 90, WINDOW_HEIGHT - 100, instructText1);
-    scoreText.RenderText(WINDOW_WIDTH/2 - instruct2Width/2 + 60, WINDOW_HEIGHT - 70,  instructText2);
+    scoreText.RenderText(WINDOW_WIDTH/2 - instruct1Width/2 + 90, WINDOW_HEIGHT - 130, instructText1);
+    scoreText.RenderText(WINDOW_WIDTH/2 - instruct2Width/2 + 60, WINDOW_HEIGHT - 100, instructText2);
+    scoreText.RenderText(WINDOW_WIDTH/2 - instruct3Width/2 + 90, WINDOW_HEIGHT - 70,  instructText3);
 
     glutSwapBuffers();
 }
@@ -413,11 +424,12 @@ void drawButton(const Button& btn) {
     glDisable(GL_DEPTH_TEST);
 
     if (btn.isHovered) {
-        glColor4f(0.4f, 0.7f, 1.0f, 1.0f);  // ���亮藍
+        glColor4f(0.4f, 0.7f, 1.0f, 1.0f);  // Light blue when hovered
     } else {
-        glColor4f(0.1f, 0.3f, 0.6f, 1.0f);  // 深藍
+        glColor4f(0.1f, 0.3f, 0.6f, 1.0f);  // Dark blue normally
     }
-    // 按鈕背景
+
+    // Button background
     glBegin(GL_QUADS);
         glVertex2f(btn.x,            btn.y);
         glVertex2f(btn.x+btn.width,  btn.y);
@@ -425,7 +437,7 @@ void drawButton(const Button& btn) {
         glVertex2f(btn.x,            btn.y+btn.height);
     glEnd();
 
-    // 按鈕邊框（白色）
+    // Button border (white)
     glColor3f(1.0f, 1.0f, 1.0f);
     glBegin(GL_LINE_LOOP);
         glVertex2f(btn.x,            btn.y);
@@ -434,9 +446,9 @@ void drawButton(const Button& btn) {
         glVertex2f(btn.x,            btn.y+btn.height);
     glEnd();
 
-    // 按鈕文字
+    // Button text
     glColor3f(1.0f, 1.0f, 1.0f);
-    float textX = btn.x + (btn.width - btn.text.length() * 9) / 2.0f; 
+    float textX = btn.x + (btn.width - btn.text.length() * 9) / 2.0f;
     float textY = btn.y + (btn.height + 10) / 2.0f;
     scoreText.RenderText(textX, textY, btn.text);
 
@@ -444,7 +456,6 @@ void drawButton(const Button& btn) {
     glEnable(GL_LIGHTING);
 }
 
-// 開始遊戲：設定難度、初始分數、時間等
 void startGame(Difficulty diff) {
     currentState       = PLAYING;
     selectedDifficulty = diff;
@@ -452,23 +463,24 @@ void startGame(Difficulty diff) {
     gameTime          = 0.0f;
     gameOverStartTime = 0.0f;
 
-    // 依難度設定
     mainFruits.clear();
     blackFruits.clear();
 
     switch (diff) {
         case EASY:
-            life = 30;
-            for (int i = 0; i < 5; ++i) { // 可調整數量
+            life = 5;
+            fruitSpeedMultiplier = 1.0f;
+            for (int i = 0; i < 5; ++i) {
                 mainFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::MAIN);
             }
             for (int i = 0; i < 3; ++i) {
                 blackFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::BLACK);
             }
             break;
-        case NORMAL:
-            life = 20;
-            for (int i = 0; i < 7; ++i) { // 可調整數量
+        case MEDIUM:
+            life = 3;
+            fruitSpeedMultiplier = 1.5f;
+            for (int i = 0; i < 7; ++i) {
                 mainFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::MAIN);
             }
             for (int i = 0; i < 5; ++i) {
@@ -476,8 +488,9 @@ void startGame(Difficulty diff) {
             }
             break;
         case HARD:
-            life = 10;
-            for (int i = 0; i < 10; ++i) { // 可調整數量
+            life = 1;
+            fruitSpeedMultiplier = 2.0f;
+            for (int i = 0; i < 10; ++i) {
                 mainFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::MAIN);
             }
             for (int i = 0; i < 7; ++i) {
@@ -497,10 +510,8 @@ void startGame(Difficulty diff) {
     firstMouse = true;
 }
 
-// ========================== 事件回呼 ========================== //
 
 void mouse(int button, int state, int x, int y) {
-    // 只有在選單狀態接受滑鼠點擊
     if (currentState == MENU && button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
         for (size_t i = 0; i < difficultyButtons.size(); ++i) {
             const auto& btn = difficultyButtons[i];
@@ -515,7 +526,6 @@ void mouse(int button, int state, int x, int y) {
 
 void passiveMotion(int x, int y) {
     if (currentState == MENU) {
-        // 更新按鈕 hover 狀態
         for (auto& btn : difficultyButtons) {
             btn.isHovered = 
                 (x >= btn.x && x <= btn.x + btn.width &&
@@ -524,12 +534,10 @@ void passiveMotion(int x, int y) {
         glutPostRedisplay();
     }
     else if (currentState == PLAYING) {
-        // 若在遊戲中，轉為第一人稱視角處理
         mouseMotion(x, y);
     }
 }
 
-// 第一人稱視角滑鼠移動
 void mouseMotion(int x, int y) {
     if (currentState != PLAYING) return;
 
@@ -550,11 +558,9 @@ void mouseMotion(int x, int y) {
     yaw   += xoffset;
     pitch += yoffset;
 
-    // 限制 pitch
     if (pitch > 89.0f)  pitch = 89.0f;
     if (pitch < -89.0f) pitch = -89.0f;
 
-    // 計算新方向
     Vector3 direction;
     direction.x = cos(yaw * 0.0174532925f) * cos(pitch * 0.0174532925f);
     direction.y = sin(pitch * 0.0174532925f);
@@ -563,7 +569,6 @@ void mouseMotion(int x, int y) {
 
     camera.m_vView = camera.m_vPosition + direction;
 
-    // 保持游標置中
     if (x != WINDOW_WIDTH/2 || y != WINDOW_HEIGHT/2) {
         glutWarpPointer(WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
         lastMouseX = WINDOW_WIDTH/2;
@@ -572,25 +577,24 @@ void mouseMotion(int x, int y) {
 }
 
 void specialKeys(int key, int x, int y) {
-    // 預留特殊按鍵
+    // for special keys
 }
 
-// 鍵盤按下
+// keyboard down
 void keyboard(unsigned char key, int x, int y) {
     keyStates[key] = true;
 
-    // 不管在哪個 state，按 q/Q 就退出
-    if (key == 'q' || key == 'Q') {
-        exit(0);
-    }
-    // 測試用：按 z/Z 顯示分數並退出
-    else if (key == 'z' || key == 'Z') {
-        cout << "Final Score: " << score << endl;
+    if (key == 27 || key == 'q' || key == 'Q') {
         exit(0);
     }
 
     if (currentState == PLAYING) {
-        // 只有在遊戲進行中才處理這些
+        if (key == 'z' || key == 'Z') {
+            currentState = GAMEOVER;
+            gameOverStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
+            return;
+        }
+
         if (key == '+' || key == '=') {
             cameraSpeed         += 0.1f;
             fruitSpeedMultiplier+= 0.1f;
@@ -614,19 +618,15 @@ void keyboard(unsigned char key, int x, int y) {
     }
 }
 
-// 鍵盤彈起
+// keyboard up
 void keyboardUp(unsigned char key, int x, int y) {
     keyStates[key] = false;
 }
 
-// ========================== 核心處理函式 ========================== //
-
-// 鍵盤處理：WASD 移動
 void processKeys() {
     if (currentState != PLAYING) return;
 
     float speed = cameraSpeed;
-    // 空白鍵衝刺
     if (keyStates[' ']) {
         speed *= 2.0f;
     }
@@ -638,7 +638,6 @@ void processKeys() {
     Vector3 right = forward.Cross(camera.m_vUpVector);
     right.Normalize();
 
-    // 嘗試移動
     Vector3 movement(0, 0, 0);
     if (keyStates['w'] || keyStates['W']) {
         movement = movement + (forward * speed);
@@ -653,89 +652,35 @@ void processKeys() {
         movement = movement + (right * speed);
     }
 
-    // 更新位置前先檢查牆壁
     Vector3 newPosition = camera.m_vPosition + movement;
 
-    // 預留一點與牆壁的安全距
     const float WALL_BUFFER = 1.0f;
     bool collision = false;
 
-    // X 軸牆壁
     if (newPosition.x >= WALL_DISTANCE - WALL_BUFFER || newPosition.x <= -WALL_DISTANCE + WALL_BUFFER) {
         collision = true;
     }
-    // Z 軸牆壁
     if (newPosition.z >= WALL_DISTANCE - WALL_BUFFER || newPosition.z <= -WALL_DISTANCE + WALL_BUFFER) {
         collision = true;
     }
 
     if (!collision) {
-        // 沒撞牆，更新攝影機位置與 view
         camera.m_vPosition = newPosition;
         camera.m_vView     = camera.m_vView + movement;
-    } else {
-        // 若撞牆，看是否需要滑動處理；此處簡化為不允許進入
-        // 可自行作「邊滑動邊前進」等邏輯
     }
 }
 
-// 檢查籃子或玩家是否接到水果
 void checkCollisions() {
     Vector3 cameraPos = camera.m_vPosition;
-    const float CATCH_DISTANCE = 1.5f;
+    
+    Vector3 viewDir = camera.m_vView - camera.m_vPosition;
+    viewDir.Normalize();
+    Vector3 ringPos = camera.m_vPosition + (viewDir * 2.0f);
 
-    // 檢查主要水果
     for (auto& fruit : mainFruits) {
         if (fruit.IsActive()) {
             Vector3 fruitPos = fruit.GetPosition();
-
-            // 先檢查籃子
-            float dx = fruitPos.x - basketPosition.x;
-            float dz = fruitPos.z - basketPosition.z;
-            float distToBasket = sqrt(dx * dx + dz * dz);
-
-            if (distToBasket < BASKET_RADIUS &&
-                fruitPos.y < basketPosition.y + BASKET_HEIGHT &&
-                fruitPos.y > basketPosition.y) {
-                int points = fruit.GetPoints();
-                score += points;
-                // 若有負分水果則可扣血
-                if (points < 0) {
-                    life--;
-                    if (life <= 0) {
-                        currentState = GAMEOVER;
-                        gameOverStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
-                    }
-                }
-                fruit.SetActive(false);
-                continue; // 籃子接到後，就不再判斷玩家
-            }
-
-            // 再檢查玩家碰撞
-            dx = fruitPos.x - cameraPos.x;
-            dz = fruitPos.z - cameraPos.z;
-            float distToPlayer = sqrt(dx*dx + dz*dz);
-            if (distToPlayer < CATCH_DISTANCE && fruitPos.y < cameraPos.y + 2.0f) {
-                int points = fruit.GetPoints();
-                score += points;
-                if (points < 0) {
-                    life--;
-                    if (life <= 0) {
-                        currentState = GAMEOVER;
-                        gameOverStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
-                    }
-                }
-                fruit.SetActive(false);
-            }
-        }
-    }
-
-    // 檢查黑球
-    for (auto& fruit : blackFruits) {
-        if (fruit.IsActive()) {
-            Vector3 fruitPos = fruit.GetPosition();
             
-            // 檢查球是否通過環
             Vector3 toFruit = fruitPos - ringPos;
             float distAlongView = toFruit.Dot(viewDir);
             Vector3 projection = ringPos + viewDir * distAlongView;
@@ -745,12 +690,9 @@ void checkCollisions() {
             static Vector3 lastFruitPos = fruitPos;
             float lastDistAlongView = (lastFruitPos - ringPos).Dot(viewDir);
             
-            if ((lastDistAlongView * distAlongView < 0) &&  // 穿過環平面
-                (distToAxis <= RING_RADIUS) &&              // 在環的外圈內
-                (distToAxis >= RING_RADIUS * 0.8f)) {      // 在環的內圈外
-                
-                // 觸發得分效果
-                isScoring = true;
+            if ((lastDistAlongView * distAlongView < 0) &&
+                (distToAxis <= RING_RADIUS) &&
+                (distToAxis >= RING_RADIUS * 0.8f)) {
                 
                 int points = fruit.GetPoints();
                 score += points;
@@ -767,7 +709,6 @@ void checkCollisions() {
             
             lastFruitPos = fruitPos;
             
-            // 檢查玩家碰撞
             float dx = fruitPos.x - cameraPos.x;
             float dz = fruitPos.z - cameraPos.z;
             float distToPlayer = sqrt(dx*dx + dz*dz);
@@ -785,13 +726,65 @@ void checkCollisions() {
             }
         }
     }
+
+    for (auto& fruit : blackFruits) {
+        if (fruit.IsActive()) {
+            Vector3 fruitPos = fruit.GetPosition();
+            
+            Vector3 toFruit = fruitPos - ringPos;
+            float distAlongView = toFruit.Dot(viewDir);
+            Vector3 projection = ringPos + viewDir * distAlongView;
+            Vector3 toAxis = fruitPos - projection;
+            float distToAxis = sqrt(toAxis.x * toAxis.x + toAxis.y * toAxis.y + toAxis.z * toAxis.z);
+            
+            static Vector3 lastFruitPos = fruitPos;
+            float lastDistAlongView = (lastFruitPos - ringPos).Dot(viewDir);
+            
+            if ((lastDistAlongView * distAlongView < 0) &&
+                (distToAxis <= RING_RADIUS) &&
+                (distToAxis >= RING_RADIUS * 0.8f)) {
+                
+                isExploding = true;
+                explosionTime = 0.0f;
+                
+                int points = fruit.GetPoints();
+                score += points;
+                if (points < 0) {
+                    life--;
+                    if (life <= 0) {
+                        currentState = GAMEOVER;
+                        gameOverStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
+                    }
+                }
+                fruit.SetActive(false);
+                continue;
+            }
+            
+            lastFruitPos = fruitPos;
+            
+            float dx = fruitPos.x - cameraPos.x;
+            float dz = fruitPos.z - cameraPos.z;
+            float distToPlayer = sqrt(dx*dx + dz*dz);
+            if (distToPlayer < CATCH_DISTANCE && fruitPos.y < cameraPos.y + 2.0f) {
+                isExploding = true;
+                explosionTime = 0.0f;
+                
+                int points = fruit.GetPoints();
+                score += points;
+                if (points < 0) {
+                    life--;
+                    if (life <= 0) {
+                        currentState = GAMEOVER;
+                        gameOverStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
+                    }
+                }
+                fruit.SetActive(false);
+            }
+        }
+    }
 }
 
-// ========================== 場景繪製 ========================== //
-
-// 建立地面與四面牆
 void createGroundAndWalls() {
-    // 先畫地面（白色或灰色都可，視需求）
     glDisable(GL_TEXTURE_2D);
     glColor3f(1.0f, 1.0f, 1.0f);
     glBegin(GL_QUADS);
@@ -802,12 +795,10 @@ void createGroundAndWalls() {
         glTexCoord2f(0.0f, 1.0f); glVertex3f(-GROUND_SIZE, GROUND_Y,  GROUND_SIZE);
     glEnd();
 
-    // 繪製牆壁
     glEnable(GL_TEXTURE_2D);
     wallTexture.BindTexture();
     glColor3f(1.0f, 1.0f, 1.0f);
 
-    // 北牆
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 0.0f, 1.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex3f(-GROUND_SIZE, GROUND_Y, -WALL_DISTANCE);
@@ -816,7 +807,6 @@ void createGroundAndWalls() {
         glTexCoord2f(0.0f, 1.0f); glVertex3f(-GROUND_SIZE, WALL_HEIGHT, -WALL_DISTANCE);
     glEnd();
 
-    // 南牆
     glBegin(GL_QUADS);
         glNormal3f(0.0f, 0.0f, -1.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex3f(-GROUND_SIZE, GROUND_Y, WALL_DISTANCE);
@@ -825,7 +815,6 @@ void createGroundAndWalls() {
         glTexCoord2f(0.0f, 1.0f); glVertex3f(-GROUND_SIZE, WALL_HEIGHT, WALL_DISTANCE);
     glEnd();
 
-    // 東牆
     glBegin(GL_QUADS);
         glNormal3f(-1.0f, 0.0f, 0.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex3f(WALL_DISTANCE, GROUND_Y, -GROUND_SIZE);
@@ -834,7 +823,6 @@ void createGroundAndWalls() {
         glTexCoord2f(0.0f, 1.0f); glVertex3f(WALL_DISTANCE, WALL_HEIGHT, -GROUND_SIZE);
     glEnd();
 
-    // 西牆
     glBegin(GL_QUADS);
         glNormal3f(1.0f, 0.0f, 0.0f);
         glTexCoord2f(0.0f, 0.0f); glVertex3f(-WALL_DISTANCE, GROUND_Y, -GROUND_SIZE);
@@ -847,111 +835,11 @@ void createGroundAndWalls() {
     glDisable(GL_TEXTURE_2D);
 }
 
-// 使用 code2 的「編織籃子」畫法
-/*
-void drawBasket() {
-    glPushMatrix();
-    glTranslatef(basketPosition.x, basketPosition.y, basketPosition.z);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // 半透明棕色
-    glColor4f(0.8f, 0.4f, 0.0f, 0.6f);
-
-    // --- 繪製編織籃�� ---
-    int   numRings       = 3;        // 編織層數
-    float ringThickness  = 0.02f;    // 每層間厚度（可自行使用或忽略）
-    float initialRadius  = BASKET_RADIUS;
-    float radiusStep     = 0.05f;    // 每層半徑縮減量
-
-    // 每層環形
-    for (int r = 0; r < numRings; r++) {
-        float currentRadius = initialRadius - r * radiusStep;
-        glBegin(GL_LINE_LOOP);
-        for (int i = 0; i < BASKET_SEGMENTS; i++) {
-            float angle = (float)i / BASKET_SEGMENTS * 2.0f * M_PI;
-            float x = cos(angle) * currentRadius;
-            float z = sin(angle) * currentRadius;
-            glVertex3f(x, BASKET_HEIGHT, z);
-        }
-        glEnd();
-    }
-
-    // 編織線條
-    int numVerticalLines = 12;
-    for (int i = 0; i < numVerticalLines; i++) {
-        float angle = (float)i / numVerticalLines * 2.0f * M_PI;
-        float x_outer = cos(angle) * initialRadius;
-        float z_outer = sin(angle) * initialRadius;
-        float x_inner = cos(angle) * (initialRadius - (numRings - 1) * radiusStep);
-        float z_inner = sin(angle) * (initialRadius - (numRings - 1) * radiusStep);
-
-        glBegin(GL_LINES);
-            glVertex3f(x_outer, BASKET_HEIGHT, z_outer);
-            glVertex3f(x_inner, 0.0f, z_inner);
-        glEnd();
-    }
-
-    // 側面
-    glBegin(GL_QUAD_STRIP);
-    for (int i = 0; i <= BASKET_SEGMENTS; i++) {
-        float angle = (float)i / BASKET_SEGMENTS * 2.0f * M_PI;
-        float x = cos(angle) * BASKET_RADIUS;
-        float z = sin(angle) * BASKET_RADIUS;
-
-        glNormal3f(x, 0.0f, z);
-        glVertex3f(x, BASKET_HEIGHT, z);
-        glVertex3f(x, 0.0f,        z);
-    }
-    glEnd();
-
-    // 底部
-    glBegin(GL_TRIANGLE_FAN);
-    glNormal3f(0.0f, -1.0f, 0.0f);
-    glVertex3f(0.0f, 0.0f, 0.0f);
-    for (int i = 0; i <= BASKET_SEGMENTS; i++) {
-        float angle = (float)i / BASKET_SEGMENTS * 2.0f * M_PI;
-        float x = cos(angle) * BASKET_RADIUS;
-        float z = sin(angle) * BASKET_RADIUS;
-        glVertex3f(x, 0.0f, z);
-    }
-    glEnd();
-
-    // 手把（半圓）
-    glColor4f(0.8f, 0.4f, 0.0f, 0.6f);
-    glBegin(GL_LINE_STRIP);
-    int   handleSegments = 32;
-    float handleRadius   = 0.2f;
-    float handleY        = BASKET_HEIGHT + 0.1f;
-    float handleZ        = BASKET_RADIUS;
-    for (int i = 0; i <= handleSegments; i++) {
-        float angle = (float)i / handleSegments * M_PI; // 半圓
-        float x = cos(angle) * handleRadius;
-        float z = sin(angle) * handleRadius;
-        glVertex3f(x, handleY, handleZ + z);
-    }
-    glEnd();
-
-    glDisable(GL_BLEND);
-    glPopMatrix();
-}
-*/
-
-// ========================== 選單相關的按鈕處理 ========================== //
-
-// 已移除重複的 mouseMotion 函式
-
-// ========================== 完整的 drawButton 函式 ========================== //
-
-// 已在選單相關部分提供
-
 void drawRing() {
     glDisable(GL_LIGHTING);
     
     glPushMatrix();
     
-    // 計算環的位置和方向
     Vector3 viewDir = camera.m_vView - camera.m_vPosition;
     viewDir.Normalize();
     Vector3 ringPos = camera.m_vPosition + (viewDir * 2.0f);
@@ -972,15 +860,8 @@ void drawRing() {
     const float innerRadius = RING_RADIUS * 0.8f;
     float alpha = 0.3f;
     
-    if (isScoring) {
-        // 得分時顯示綠色
-        glColor4f(0.0f, 1.0f, 0.0f, alpha);
-    } else {
-        // 平時顯示黃色
-        glColor4f(1.0f, 1.0f, 0.0f, alpha);
-    }
+    glColor4f(1.0f, 1.0f, 0.0f, alpha);
     
-    // 畫環的主體
     glBegin(GL_QUAD_STRIP);
     for(int i = 0; i <= RING_SEGMENTS; i++) {
         float theta = 2.0f * M_PI * float(i) / float(RING_SEGMENTS);
@@ -994,14 +875,8 @@ void drawRing() {
     }
     glEnd();
     
-    // 畫環的邊框
-    if (isScoring) {
-        glColor4f(0.0f, 1.0f, 0.0f, alpha + 0.2f);
-    } else {
-        glColor4f(1.0f, 1.0f, 0.0f, alpha + 0.2f);
-    }
+    glColor4f(1.0f, 1.0f, 0.0f, alpha + 0.2f);
     
-    // 外圈和內圈
     glBegin(GL_LINE_LOOP);
     for(int i = 0; i < RING_SEGMENTS; i++) {
         float theta = 2.0f * M_PI * float(i) / float(RING_SEGMENTS);
@@ -1024,7 +899,4 @@ void drawRing() {
     glDisable(GL_BLEND);
     glPopMatrix();
     glEnable(GL_LIGHTING);
-    
-    // 重置得分狀態
-    isScoring = false;
 }
