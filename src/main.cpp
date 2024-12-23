@@ -499,12 +499,10 @@ void startGame(Difficulty diff) {
             break;
     }
 
-    // 重設攝影機
     camera.PositionCamera(0.0f, 2.0f, 6.0f,
                          0.0f, 0.0f, 0.0f,
                          0.0f, 1.0f, 0.0f);
 
-    // 隱藏滑鼠並置中
     glutSetCursor(GLUT_CURSOR_NONE);
     glutWarpPointer(WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
     firstMouse = true;
