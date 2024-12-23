@@ -16,18 +16,6 @@
 
 using namespace std;
 
-// Global variables
-CCamera camera;
-Text scoreText;
-int score = 0;
-int life = 20;
-const int BallHeight = 50;
-const int Interval = 20;
-vector<Fruit> fruits;
-
-// Ground texture
-GLuint groundTexture;
-
 // Window dimensions
 const int WINDOW_WIDTH = 1280;
 const int WINDOW_HEIGHT = 720;
@@ -51,6 +39,50 @@ const float BASKET_HEIGHT = 0.4f;
 const int BASKET_SEGMENTS = 32;
 Vector3 basketPosition(0.0f, 1.0f, 0.0f);  // Position of the basket
 
+// Game states
+enum GameState {
+    MENU,
+    PLAYING
+};
+
+// Difficulty levels
+enum Difficulty {
+    EASY,
+    NORMAL,
+    HARD
+};
+
+// Global variables
+GameState currentState = MENU;
+Difficulty selectedDifficulty = NORMAL;
+CCamera camera;
+Text scoreText;
+int score = 0;
+int life = 20;
+const int BallHeight = 50;
+const int Interval = 20;
+vector<Fruit> fruits;
+
+// Button dimensions
+struct Button {
+    float x, y, width, height;
+    string text;
+    bool isHovered;
+};
+
+vector<Button> difficultyButtons = {
+    {WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2 - 80, 200, 50, "Easy", false},
+    {WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2, 200, 50, "Normal", false},
+    {WINDOW_WIDTH/2 - 100, WINDOW_HEIGHT/2 + 80, 200, 50, "Hard", false}
+};
+
+// Add wall constants after ground constants
+const float WALL_HEIGHT = 10.0f;
+const float WALL_DISTANCE = GROUND_SIZE;  // Place walls at the edge of the ground
+
+// Add texture object after other global variables
+CTexture wallTexture;
+
 // Function declarations
 void init();
 void display();
@@ -61,16 +93,194 @@ void keyboardUp(unsigned char key, int x, int y);
 void specialKeys(int key, int x, int y);
 void mouse(int button, int state, int x, int y);
 void mouseMotion(int x, int y);
+void passiveMotion(int x, int y);
 void createGround();
 void checkCollisions();
 void processKeys();
 void drawBasket();
+void drawMenu();
+void drawButton(const Button& btn);
+void startGame(Difficulty diff);
+
+// Function to start the game with selected difficulty
+void startGame(Difficulty diff) {
+    currentState = PLAYING;
+    selectedDifficulty = diff;
+    score = 0;
+    
+    // Set difficulty-specific parameters
+    switch(diff) {
+        case EASY:
+            life = 30;
+            fruits.clear();
+            for (int i = 0; i < 3; ++i) {
+                fruits.push_back(Fruit(Vector3(0, BallHeight + 15 * i, 0)));
+            }
+            break;
+        case NORMAL:
+            life = 20;
+            fruits.clear();
+            for (int i = 0; i < 5; ++i) {
+                fruits.push_back(Fruit(Vector3(0, BallHeight + 15 * i, 0)));
+            }
+            break;
+        case HARD:
+            life = 10;
+            fruits.clear();
+            for (int i = 0; i < 7; ++i) {
+                fruits.push_back(Fruit(Vector3(0, BallHeight + 15 * i, 0)));
+            }
+            break;
+    }
+    
+    // Reset camera position
+    camera.PositionCamera(0.0f, 2.0f, 6.0f,   // Position
+                         0.0f, 0.0f, 0.0f,   // View
+                         0.0f, 1.0f, 0.0f);  // Up vector
+    
+    // Hide cursor and center it
+    glutSetCursor(GLUT_CURSOR_NONE);
+    glutWarpPointer(WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
+    firstMouse = true;
+}
+
+// Function to draw a button
+void drawButton(const Button& btn) {
+    // Draw button background
+    glDisable(GL_LIGHTING);
+    glDisable(GL_DEPTH_TEST);
+    
+    if (btn.isHovered) {
+        glColor4f(0.4f, 0.7f, 1.0f, 1.0f);  // Brighter blue when highlighted
+    } else {
+        glColor4f(0.1f, 0.3f, 0.6f, 1.0f);  // Darker blue for normal state
+    }
+    
+    // Draw button with a border
+    glBegin(GL_QUADS);
+    glVertex2f(btn.x, btn.y);
+    glVertex2f(btn.x + btn.width, btn.y);
+    glVertex2f(btn.x + btn.width, btn.y + btn.height);
+    glVertex2f(btn.x, btn.y + btn.height);
+    glEnd();
+    
+    // Draw button border
+    glColor3f(1.0f, 1.0f, 1.0f);  // White border
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(btn.x, btn.y);
+    glVertex2f(btn.x + btn.width, btn.y);
+    glVertex2f(btn.x + btn.width, btn.y + btn.height);
+    glVertex2f(btn.x, btn.y + btn.height);
+    glEnd();
+    
+    // Draw button text
+    glColor3f(1.0f, 1.0f, 1.0f);  // White text
+    float textX = btn.x + (btn.width - btn.text.length() * 9) / 2;  // Center text
+    float textY = btn.y + (btn.height + 10) / 2;
+    scoreText.RenderText(textX, textY, btn.text);
+    
+    glEnable(GL_DEPTH_TEST);
+}
+
+// Function to draw the menu
+void drawMenu() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glLoadIdentity();
+    
+    // Set darker background color
+    glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    // Calculate text widths (assuming each character is roughly 15 pixels wide)
+    const int charWidth = 15;
+    string titleText = "Select Difficulty";
+    string instructText1 = "Use WASD to move, Mouse to look around";
+    string instructText2 = "Press Q to quit game";
+    
+    int titleWidth = titleText.length() * charWidth;
+    int instruct1Width = instructText1.length() * charWidth;
+    int instruct2Width = instructText2.length() * charWidth;
+    
+    // Draw title (centered)
+    glColor3f(0.9f, 0.9f, 0.9f);  // Light gray for title
+    scoreText.RenderText(WINDOW_WIDTH/2 - titleWidth/2 + 55, WINDOW_HEIGHT/3 - 10, titleText);
+    
+    // Draw buttons
+    for (const auto& btn : difficultyButtons) {
+        drawButton(btn);
+    }
+    
+    // Draw instructions (centered)
+    glColor3f(1.0f, 1.0f, 0.0f);  // Yellow color for instructions
+    scoreText.RenderText(WINDOW_WIDTH/2 - instruct1Width/2 + 90, WINDOW_HEIGHT - 100, instructText1);
+    scoreText.RenderText(WINDOW_WIDTH/2 - instruct2Width/2 + 60, WINDOW_HEIGHT - 70, instructText2);
+    
+    glutSwapBuffers();
+}
+
+void display() {
+    if (currentState == MENU) {
+        drawMenu();
+        return;
+    }
+    
+    // Set white background for game
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glLoadIdentity();
+
+    camera.Look();
+
+    glDisable(GL_TEXTURE_2D);
+    createGround();
+    drawBasket();
+
+    for (auto& fruit : fruits) {
+        fruit.Draw();
+    }
+
+    glDisable(GL_LIGHTING);
+    stringstream ss;
+    ss << "Score: " << score << " Life: " << life;
+    glColor3f(0.0f, 0.0f, 0.0f);  // Black color for text
+    scoreText.RenderText(10, 30, ss.str());
+    glEnable(GL_LIGHTING);
+
+    glutSwapBuffers();
+}
+
+void mouse(int button, int state, int x, int y) {
+    if (currentState == MENU && button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+        // Check if any button was clicked
+        for (size_t i = 0; i < difficultyButtons.size(); ++i) {
+            const auto& btn = difficultyButtons[i];
+            if (x >= btn.x && x <= btn.x + btn.width &&
+                y >= btn.y && y <= btn.y + btn.height) {
+                startGame(static_cast<Difficulty>(i));
+                break;
+            }
+        }
+    }
+}
+
+void passiveMotion(int x, int y) {
+    if (currentState == MENU) {
+        // Update button hover states
+        for (auto& btn : difficultyButtons) {
+            btn.isHovered = (x >= btn.x && x <= btn.x + btn.width &&
+                            y >= btn.y && y <= btn.y + btn.height);
+        }
+        glutPostRedisplay();
+    } else {
+        mouseMotion(x, y);
+    }
+}
 
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
-    glutCreateWindow("BallQuest 720");
+    glutCreateWindow("BallQuest 720");  // Updated window title
 
     init();
 
@@ -80,20 +290,22 @@ int main(int argc, char** argv) {
     glutKeyboardUpFunc(keyboardUp);
     glutSpecialFunc(specialKeys);
     glutMouseFunc(mouse);
-    glutPassiveMotionFunc(mouseMotion);
+    glutPassiveMotionFunc(passiveMotion);
     glutIdleFunc(update);
 
-    // Hide cursor and center it
-    glutSetCursor(GLUT_CURSOR_NONE);
-    glutWarpPointer(WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
+    // Show cursor for menu
+    glutSetCursor(GLUT_CURSOR_LEFT_ARROW);
 
     glutMainLoop();
     return 0;
 }
 
 void init() {
-    glClearColor(0.9f, 0.9f, 0.9f, 1.0f);
+    glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glEnable(GL_DEPTH_TEST);
+    
+    // Load wall texture with corrected path
+    wallTexture.LoadTexture("../textures/wall.bmp");
     
     // Enable lighting after setting up the window
     glEnable(GL_LIGHTING);
@@ -116,41 +328,6 @@ void init() {
 
     // Initialize random seed
     srand(time(NULL));
-
-    // Initialize fruits
-    for (int i = 0; i < 5; ++i) {
-        fruits.push_back(Fruit(Vector3(0, BallHeight + 15 * i, 0)));
-    }
-}
-
-void display() {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glLoadIdentity();
-
-    // Set up camera
-    camera.Look();
-
-    // Draw ground with solid color
-    glDisable(GL_TEXTURE_2D);
-    glColor3f(0.5f, 0.5f, 0.5f);  // Gray color for ground
-    createGround();
-
-    // Draw basket
-    drawBasket();
-
-    // Draw fruits
-    for (auto& fruit : fruits) {
-        fruit.Draw();
-    }
-
-    // Draw score and life
-    glDisable(GL_LIGHTING);
-    stringstream ss;
-    ss << "Score: " << score << " Life: " << life;
-    scoreText.RenderText(10, 30, ss.str());
-    glEnable(GL_LIGHTING);
-
-    glutSwapBuffers();
 }
 
 void reshape(int w, int h) {
@@ -165,6 +342,11 @@ void reshape(int w, int h) {
 }
 
 void update() {
+    if (currentState == MENU) {
+        glutPostRedisplay();
+        return;
+    }
+
     static float lastTime = 0.0f;
     float currentTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
     float deltaTime = currentTime - lastTime;
@@ -202,6 +384,67 @@ void update() {
     glutPostRedisplay();
 }
 
+void createGround() {
+    // Set white color for ground
+    glColor3f(1.0f, 1.0f, 1.0f);
+    
+    glBegin(GL_QUADS);
+    glNormal3f(0.0f, 1.0f, 0.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-GROUND_SIZE, GROUND_Y, -GROUND_SIZE);
+    glTexCoord2f(1.0f, 0.0f); glVertex3f( GROUND_SIZE, GROUND_Y, -GROUND_SIZE);
+    glTexCoord2f(1.0f, 1.0f); glVertex3f( GROUND_SIZE, GROUND_Y,  GROUND_SIZE);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-GROUND_SIZE, GROUND_Y,  GROUND_SIZE);
+    glEnd();
+    
+    // Draw reference walls with texture
+    glColor3f(1.0f, 1.0f, 1.0f);  // White color to show texture properly
+    glEnable(GL_TEXTURE_2D);
+    wallTexture.BindTexture();  // Enable wall texture
+    
+    // North wall
+    glBegin(GL_QUADS);
+    glNormal3f(0.0f, 0.0f, 1.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-GROUND_SIZE, GROUND_Y, -WALL_DISTANCE);
+    glTexCoord2f(4.0f, 0.0f); glVertex3f( GROUND_SIZE, GROUND_Y, -WALL_DISTANCE);
+    glTexCoord2f(4.0f, 1.0f); glVertex3f( GROUND_SIZE, WALL_HEIGHT, -WALL_DISTANCE);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-GROUND_SIZE, WALL_HEIGHT, -WALL_DISTANCE);
+    glEnd();
+    
+    // South wall
+    glBegin(GL_QUADS);
+    glNormal3f(0.0f, 0.0f, -1.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-GROUND_SIZE, GROUND_Y, WALL_DISTANCE);
+    glTexCoord2f(4.0f, 0.0f); glVertex3f( GROUND_SIZE, GROUND_Y, WALL_DISTANCE);
+    glTexCoord2f(4.0f, 1.0f); glVertex3f( GROUND_SIZE, WALL_HEIGHT, WALL_DISTANCE);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-GROUND_SIZE, WALL_HEIGHT, WALL_DISTANCE);
+    glEnd();
+    
+    // East wall
+    glBegin(GL_QUADS);
+    glNormal3f(-1.0f, 0.0f, 0.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(WALL_DISTANCE, GROUND_Y, -GROUND_SIZE);
+    glTexCoord2f(4.0f, 0.0f); glVertex3f(WALL_DISTANCE, GROUND_Y,  GROUND_SIZE);
+    glTexCoord2f(4.0f, 1.0f); glVertex3f(WALL_DISTANCE, WALL_HEIGHT,  GROUND_SIZE);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(WALL_DISTANCE, WALL_HEIGHT, -GROUND_SIZE);
+    glEnd();
+    
+    // West wall
+    glBegin(GL_QUADS);
+    glNormal3f(1.0f, 0.0f, 0.0f);
+    glTexCoord2f(0.0f, 0.0f); glVertex3f(-WALL_DISTANCE, GROUND_Y, -GROUND_SIZE);
+    glTexCoord2f(4.0f, 0.0f); glVertex3f(-WALL_DISTANCE, GROUND_Y,  GROUND_SIZE);
+    glTexCoord2f(4.0f, 1.0f); glVertex3f(-WALL_DISTANCE, WALL_HEIGHT,  GROUND_SIZE);
+    glTexCoord2f(0.0f, 1.0f); glVertex3f(-WALL_DISTANCE, WALL_HEIGHT, -GROUND_SIZE);
+    glEnd();
+    
+    wallTexture.UnbindTexture();  // Disable wall texture
+    glDisable(GL_TEXTURE_2D);  // Disable texturing after drawing walls
+}
+
+void specialKeys(int key, int x, int y) {
+    // Currently not used
+}
+
 void keyboard(unsigned char key, int x, int y) {
     keyStates[key] = true;
     
@@ -219,6 +462,8 @@ void keyboardUp(unsigned char key, int x, int y) {
 }
 
 void processKeys() {
+    if (currentState != PLAYING) return;
+
     float speed = 0.5f;
     if (keyStates[' ']) { // Space bar for sprint
         speed = 1.0f;
@@ -231,25 +476,60 @@ void processKeys() {
     Vector3 right = forward.Cross(camera.m_vUpVector);
     right.Normalize();
 
+    // Store the current position
+    Vector3 newPosition = camera.m_vPosition;
+    Vector3 movement(0, 0, 0);
+
+    // Calculate potential movement
     if (keyStates['w'] || keyStates['W']) {
-        camera.m_vPosition = camera.m_vPosition + (forward * speed);
-        camera.m_vView = camera.m_vView + (forward * speed);
+        movement = movement + (forward * speed);
     }
     if (keyStates['s'] || keyStates['S']) {
-        camera.m_vPosition = camera.m_vPosition - (forward * speed);
-        camera.m_vView = camera.m_vView - (forward * speed);
+        movement = movement - (forward * speed);
     }
     if (keyStates['a'] || keyStates['A']) {
-        camera.m_vPosition = camera.m_vPosition - (right * speed);
-        camera.m_vView = camera.m_vView - (right * speed);
+        movement = movement - (right * speed);
     }
     if (keyStates['d'] || keyStates['D']) {
-        camera.m_vPosition = camera.m_vPosition + (right * speed);
-        camera.m_vView = camera.m_vView + (right * speed);
+        movement = movement + (right * speed);
+    }
+
+    // Calculate new position
+    newPosition = newPosition + movement;
+
+    // Check wall collisions
+    const float WALL_BUFFER = 1.0f;  // Buffer distance from walls
+    bool collision = false;
+
+    // Check X-axis walls (East and West)
+    if (newPosition.x >= WALL_DISTANCE - WALL_BUFFER || newPosition.x <= -WALL_DISTANCE + WALL_BUFFER) {
+        newPosition.x = camera.m_vPosition.x;  // Revert X movement
+        collision = true;
+    }
+
+    // Check Z-axis walls (North and South)
+    if (newPosition.z >= WALL_DISTANCE - WALL_BUFFER || newPosition.z <= -WALL_DISTANCE + WALL_BUFFER) {
+        newPosition.z = camera.m_vPosition.z;  // Revert Z movement
+        collision = true;
+    }
+
+    // If no collision, update position
+    if (!collision) {
+        camera.m_vPosition = newPosition;
+        camera.m_vView = camera.m_vView + movement;
+    } else {
+        // If there is a collision, allow sliding along the wall
+        Vector3 allowedMovement = newPosition - camera.m_vPosition;
+        if (!collision || abs(allowedMovement.x) > 0.01f || abs(allowedMovement.z) > 0.01f) {
+            camera.m_vPosition = camera.m_vPosition + allowedMovement;
+            camera.m_vView = camera.m_vView + allowedMovement;
+        }
     }
 }
 
 void mouseMotion(int x, int y) {
+    if (currentState != PLAYING) return;
+
     if (firstMouse) {
         lastMouseX = x;
         lastMouseY = y;
@@ -287,24 +567,6 @@ void mouseMotion(int x, int y) {
         lastMouseX = WINDOW_WIDTH/2;
         lastMouseY = WINDOW_HEIGHT/2;
     }
-}
-
-void specialKeys(int key, int x, int y) {
-    // Currently not used
-}
-
-void mouse(int button, int state, int x, int y) {
-    // Currently not used
-}
-
-void createGround() {
-    glBegin(GL_QUADS);
-    glNormal3f(0.0f, 1.0f, 0.0f);
-    glTexCoord2f(0.0f, 0.0f); glVertex3f(-GROUND_SIZE, GROUND_Y, -GROUND_SIZE);
-    glTexCoord2f(1.0f, 0.0f); glVertex3f( GROUND_SIZE, GROUND_Y, -GROUND_SIZE);
-    glTexCoord2f(1.0f, 1.0f); glVertex3f( GROUND_SIZE, GROUND_Y,  GROUND_SIZE);
-    glTexCoord2f(0.0f, 1.0f); glVertex3f(-GROUND_SIZE, GROUND_Y,  GROUND_SIZE);
-    glEnd();
 }
 
 void checkCollisions() {
@@ -412,4 +674,6 @@ void drawBasket() {
     
     glDisable(GL_BLEND);  // Disable blending after drawing the basket
     glPopMatrix();
-} 
+}
+
+// ... rest of the code ... 
