@@ -1,91 +1,122 @@
-# Ball Catcher Game
+# BallQuest 720
 
-一個使用 OpenGL 開發的第一人稱接球遊戲。玩家需要在 3D 空間中移動並接住從天上落下的不同顏色的球。
+A 3D ball-catching game implemented in OpenGL where players need to catch falling balls through a ring or directly.
 
-## 遊戲特點
+## Game Features
 
-### 球體類型
-- 紅色球：1分，體型大
-- 綠色球：3分，體型適中
-- 藍色球：5分，體型小
-- 彩虹球：10分，體型最小
-- 黑色球：-10分，體型特大，且會減少生命值
+### Difficulty Levels
+- **Easy**: 5 lives, normal ball speed (1.0x)
+- **Medium**: 3 lives, faster ball speed (1.5x)
+- **Hard**: 1 life, fastest ball speed (2.0x)
 
-### 遊戲規則
-- 初始生命值為 20
-- 每 10 分會增加一個球的生成
-- 當生命值歸零時遊戲結束
-- 黑色球會減少生命值
-- 漏接過多球也會導致遊戲結束
+### Gameplay Elements
+- Regular colored balls (positive points)
+- Black balls (negative points)
+- Wall collision detection
+- Black screen effect when hitting black balls
 
-### 控制方式
-- WASD：移動控制
-  - W：向前移動
-  - S：向後移動
-  - A：向左移動
-  - D：向右移動
-- 滑鼠：視角控制
-- 空白鍵：加速移動
-- Q：退出遊戲
-- Z：提前結算分數
+### Controls
+- **WASD**: Move the player
+- **Mouse**: Look around
+- **Spacebar**: Sprint (2x movement speed)
+- **Q**: Quit game immediately
+- **Z**: End current game and show score
+- **+/-**: Adjust game speed
+- **[/]**: Adjust mouse sensitivity
 
-## 系統需求
+### Scoring System
+- Catch balls through the ring or by direct contact
+- Regular balls give positive points
+- Black balls give negative points and reduce lives
+- Game ends when:
+  - Time runs out (120 seconds)
+  - Lives reach zero
+  - Player presses Z
 
-### 依賴項
+### Visual Effects
+- Textured walls
+- Semi-transparent yellow ring
+- 2-second black screen fade effect when hitting black balls
+- Score and life display
+- Remaining time counter
+
+## Technical Requirements
 - OpenGL
 - GLUT
-- C++ 編譯器（支援 C++17）
-- CMake (>= 3.10)
+- C++ compiler
 
-### 安裝依賴項（Ubuntu）
-```bash
-sudo apt-get update
-sudo apt-get install -y freeglut3-dev
-```
+## Building and Running
+1. Create a build directory:
+   ```bash
+   mkdir build
+   cd build
+   ```
 
-## 編譯和運行
+2. Build the project:
+   ```bash
+   cmake ..
+   make
+   ```
 
-1. 創建構建目錄：
-```bash
-mkdir build
-cd build
-```
+3. Run the game:
+   ```bash
+   ./BallCatcherGame
+   ```
 
-2. 配置專案：
-```bash
-cmake ..
-```
+## Project Structure
+- `src/`: Source files
+  - `main.cpp`: Main game loop, OpenGL initialization, and core game logic
+  - `Fruit.cpp`: Implementation of ball objects and their behaviors
+  - `Camera.cpp`: First-person camera implementation
+  - `Vector3.cpp`: 3D vector mathematics implementation
+  - `Texture.cpp`: Texture loading and management
+  - `Text.cpp`: Text rendering utilities
 
-3. 編譯：
-```bash
-make
-```
+- `include/`: Header files
+  - `Fruit.h`: Ball class definition, including:
+    - Ball types (regular and black)
+    - Movement and collision detection
+    - Points system
+  - `Camera.h`: Camera class definition, including:
+    - View matrix calculations
+    - Movement and rotation handling
+    - First-person controls
+  - `Vector3.h`: 3D vector class with:
+    - Basic vector operations
+    - Normalization and dot product
+    - Vector mathematics utilities
+  - `Texture.h`: Texture management class with:
+    - Texture loading from BMP files
+    - OpenGL texture binding
+    - Resource management
+  - `Text.h`: Text rendering class for:
+    - Score display
+    - Menu text
+    - Game messages
 
-4. 運行：
-```bash
-./BallCatcherGame
-```
+- `textures/`: Texture files
+  - `wall.bmp`: Wall texture for the game environment
 
-## 開發說明
+- `build/`: Build directory (created during compilation)
+  - Contains compiled objects
+  - Executable file
+  - CMake generated files
 
-### 專案結構
-- `src/`: 源代碼文件
-  - `main.cpp`: 主程式
-  - `Camera.cpp`: 相機控制
-  - `Vector3.cpp`: 3D 向量運算
-  - `Texture.cpp`: 紋理加載
-  - `Text.cpp`: 文字渲染
-  - `Fruit.cpp`: 球體物件
-- `include/`: 頭文件
-  - `Camera.h`: 相機類定義
-  - `Vector3.h`: 向量類定義
-  - `Texture.h`: 紋理類定義
-  - `Text.h`: 文字類定義
-  - `Fruit.h`: 球體類定義
+- `CMakeLists.txt`: CMake configuration file
+  - Project settings
+  - Compiler flags
+  - Library dependencies
+  - Build targets
 
-### 技術特點
-- 使用 OpenGL 固定管線渲染
-- 3D 碰撞檢測
-- 紋理映射
-- 第一人稱視角控制
-- 基於時間的物理更新 
+## Game Flow
+1. Start at menu screen
+2. Select difficulty level
+3. Play the game:
+   - Catch regular balls for points
+   - Avoid or be careful with black balls
+   - Watch your remaining lives and time
+4. Game ends when:
+   - Time runs out
+   - Lives reach zero
+   - Z key is pressed
+5. View final score
