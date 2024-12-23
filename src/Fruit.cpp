@@ -1,13 +1,27 @@
-#include "../include/Fruit.h"
+#include "Fruit.h"
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
 
-// 假設全域變量已在 main.cpp 中定義
+// Assume global variable defined in main.cpp
 extern float fruitSpeedMultiplier;
 
-Fruit::Fruit(const Vector3& pos) : m_position(pos), m_active(true), m_time(0), m_isRainbow(false), m_points(0) {
-    ResetRandomFruit(pos.y, 0.0f); // 初始遊戲時間設為 0.0f
+// Initialize the static member
+GLUquadricObj* Fruit::s_quadric = nullptr;
+
+Fruit::Fruit(const Vector3& pos, FruitType type) 
+    : m_position(pos), m_active(true), m_time(0), m_isRainbow(false), m_points(0), m_type(type) {
+    ResetRandomFruit(pos.y, 0.0f, type); // Initial game time set to 0.0f
+
+    // Initialize the quadric if not already done
+    if (!s_quadric) {
+        s_quadric = gluNewQuadric();
+        gluQuadricDrawStyle(s_quadric, GLU_FILL);
+    }
+}
+
+Fruit::~Fruit() {
+    // Destructor can remain empty if CleanupQuadric is called manually
 }
 
 void Fruit::Draw() {
@@ -32,6 +46,11 @@ void Fruit::Draw() {
     glPopMatrix();
 }
 
+void Fruit::DrawSphere() {
+    if (!s_quadric) return; // Ensure quadric is initialized
+    gluSphere(s_quadric, m_size, 32, 32);
+}
+
 void Fruit::Update(float deltaTime) {
     if (!m_active) return;
 
@@ -42,63 +61,74 @@ void Fruit::Update(float deltaTime) {
     }
 }
 
-void Fruit::ResetRandomFruit(float height, float gameTime) {
-    // 設置隨機種子
+void Fruit::ResetRandomFruit(float height, float gameTime, FruitType type) {
+    // Set random seed
     static bool seeded = false;
     if (!seeded) {
         srand(static_cast<unsigned>(time(nullptr)));
         seeded = true;
     }
 
-    // 設置水果的位置
-    m_position.x = (rand() % 50 - 25) * 1.0f;  // 隨機 x 介於 -25 和 25
+    m_type = type;
+
+    // Set fruit position
+    m_position.x = (rand() % 50 - 25) * 1.0f;  // Random x between -25 and 25
     m_position.y = height;
-    m_position.z = (rand() % 40 - 20) * 1.0f;  // 隨機 z 介於 -20 和 20
+    m_position.z = (rand() % 40 - 20) * 1.0f;  // Random z between -20 and 20
 
-    // 根據遊戲時間決定水果的類型
-    if (gameTime <= 60.0f) {
-        // 前 80 秒：紅球
-        m_color = Vector3(1.0f, 0.0f, 0.0f); // 紅色
-        m_size = 0.5f; // 設定適當的大小
-        m_points = 1;
+    if (m_type == FruitType::BLACK) {
+        // Set black fruit attributes
+        m_color = Vector3(0.0f, 0.0f, 0.0f); // Black
+        m_size = 0.5f; // Black fruit size
+        m_points = -1; // Assuming black fruit deducts points
         m_isRainbow = false;
     }
-    else if (gameTime <= 100.0f) {
-        // 81-110 秒：黃球
-        m_color = Vector3(1.0f, 1.0f, 0.0f); // 黃色
-        m_size = 0.7f; // 設定適當的大小
-        m_points = 2;
-        m_isRainbow = false;
-    }
-    else if (gameTime <= 120.0f) {
-        // 111-120 秒：彩色球
-        // 隨機選擇一種顏色
-        float chance = static_cast<float>(rand()) / RAND_MAX;
-        if (chance < 0.25f) {
-            m_color = Vector3(1.0f, 0.0f, 0.0f); // 紅色
+    else { // FruitType::MAIN
+        // Determine main fruit type based on game time
+        if (gameTime <= 60.0f) {
+            // First 60 seconds: Red fruit
+            m_color = Vector3(1.0f, 0.0f, 0.0f); // Red
+            m_size = 0.5f; // Appropriate size
+            m_points = 1;
+            m_isRainbow = false;
         }
-        else if (chance < 0.5f) {
-            m_color = Vector3(0.0f, 1.0f, 0.0f); // 綠色
+        else if (gameTime <= 100.0f) {
+            // 60-100 seconds: Yellow fruit
+            m_color = Vector3(1.0f, 1.0f, 0.0f); // Yellow
+            m_size = 0.7f; // Appropriate size
+            m_points = 2;
+            m_isRainbow = false;
         }
-        else if (chance < 0.75f) {
-            m_color = Vector3(0.0f, 0.0f, 1.0f); // 藍色
+        else if (gameTime <= 120.0f) {
+            // 100-120 seconds: Rainbow fruit
+            // Randomly choose a color
+            float chance = static_cast<float>(rand()) / RAND_MAX;
+            if (chance < 0.25f) {
+                m_color = Vector3(1.0f, 0.0f, 0.0f); // Red
+            }
+            else if (chance < 0.5f) {
+                m_color = Vector3(0.0f, 1.0f, 0.0f); // Green
+            }
+            else if (chance < 0.75f) {
+                m_color = Vector3(0.0f, 0.0f, 1.0f); // Blue
+            }
+            else {
+                m_color = Vector3(1.0f, 0.0f, 1.0f); // Purple
+            }
+            m_size = 1.0f; // Appropriate size
+            m_points = 10;
+            m_isRainbow = true; // Enable rainbow effect
         }
-        else {
-            m_color = Vector3(1.0f, 0.0f, 1.0f); // 紫色
-        }
-        m_size = 1.0f; // 設定適當的大小
-        m_points = 10;
-        m_isRainbow = true; // 啟用彩虹效果
     }
 
-    // 設定速度（根據需要調整）
+    // Set speed (adjust as needed)
     m_speed = 5.0f + static_cast<float>(rand() % 30) / 10.0f;  // Speed between 5.0 and 8.0
     m_active = true;
 }
 
-void Fruit::DrawSphere() {
-    GLUquadricObj* quadric = gluNewQuadric();
-    gluQuadricDrawStyle(quadric, GLU_FILL);
-    gluSphere(quadric, m_size, 32, 32);
-    gluDeleteQuadric(quadric);
+void Fruit::CleanupQuadric() {
+    if (s_quadric) {
+        gluDeleteQuadric(s_quadric);
+        s_quadric = nullptr;
+    }
 }
