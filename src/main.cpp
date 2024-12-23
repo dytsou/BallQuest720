@@ -1,3 +1,4 @@
+// main.cpp
 #include <cmath>
 #include <vector>
 #include <ctime>
@@ -37,7 +38,6 @@ CCamera camera;
 Text    scoreText;
 int     score = 0;
 int     life  = 20;  // 初始生命
-vector<Fruit> fruits;
 
 // 水果相關
 const int  BallHeight = 50;  // 水果重置時離地高度
@@ -120,6 +120,25 @@ void processKeys();
 void checkCollisions();
 //void drawBasket();
 
+// ========================== 全域水果容器 ========================== //
+
+// 主要水果和黑球的容器
+vector<Fruit> mainFruits;
+vector<Fruit> blackFruits;
+
+// 初始化水果
+void InitializeFruits() {
+    // 初始生成一定數量的主要水果和黑球
+    for (int i = 0; i < 5; ++i) { // 可根據難度調整
+        Vector3 pos(0.0f, 0.0f, 0.0f);
+        mainFruits.emplace_back(pos, FruitType::MAIN);
+    }
+    for (int i = 0; i < 3; ++i) { // 可根據難度調整
+        Vector3 pos(0.0f, 0.0f, 0.0f);
+        blackFruits.emplace_back(pos, FruitType::BLACK);
+    }
+}
+
 // ========================== 主函式 ========================== //
 
 int main(int argc, char** argv) {
@@ -129,6 +148,9 @@ int main(int argc, char** argv) {
     glutCreateWindow("BallQuest 720 - Combined Version");
 
     init();
+
+    // 初始化水果
+    InitializeFruits();
 
     // 設定 callback
     glutDisplayFunc(display);
@@ -238,8 +260,13 @@ void display() {
     // 繪製籃子
     //drawBasket();
 
-    // 繪製水果
-    for (auto& fruit : fruits) {
+    // 繪製主要水果
+    for (auto& fruit : mainFruits) {
+        fruit.Draw();
+    }
+
+    // 繪製黑球
+    for (auto& fruit : blackFruits) {
         fruit.Draw();
     }
 
@@ -308,18 +335,30 @@ void update() {
     basketPosition.z = camera.m_vPosition.z + forward.z;
     basketPosition.y = camera.m_vPosition.y + 0.1f;
 
-    // 更新水果
-    for (auto& fruit : fruits) {
+    // 更新主要水果
+    for (auto& fruit : mainFruits) {
+        fruit.Update(deltaTime * fruitSpeedMultiplier); 
+    }
+
+    // 更新黑球
+    for (auto& fruit : blackFruits) {
         fruit.Update(deltaTime * fruitSpeedMultiplier); 
     }
 
     // 檢查碰撞
     checkCollisions();
 
-    // 重置不活躍水果
-    for (auto& fruit : fruits) {
+    // 重置不活躍的主要水果
+    for (auto& fruit : mainFruits) {
         if (!fruit.IsActive()) {
-            fruit.ResetRandomFruit(BallHeight, gameTime); 
+            fruit.ResetRandomFruit(BallHeight, gameTime, FruitType::MAIN); 
+        }
+    }
+
+    // 重置不活躍的黑球
+    for (auto& fruit : blackFruits) {
+        if (!fruit.IsActive()) {
+            fruit.ResetRandomFruit(BallHeight, gameTime, FruitType::BLACK); 
         }
     }
 
@@ -408,24 +447,34 @@ void startGame(Difficulty diff) {
     gameOverStartTime = 0.0f;
 
     // 依難度設定
-    fruits.clear();
+    mainFruits.clear();
+    blackFruits.clear();
     switch (diff) {
         case EASY:
             life = 30;
+            for (int i = 0; i < 5; ++i) { // 可調整數量
+                mainFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::MAIN);
+            }
             for (int i = 0; i < 3; ++i) {
-                fruits.push_back(Fruit(Vector3(0, BallHeight + 15*i, 0)));
+                blackFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::BLACK);
             }
             break;
         case NORMAL:
             life = 20;
+            for (int i = 0; i < 7; ++i) { // 可調整數量
+                mainFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::MAIN);
+            }
             for (int i = 0; i < 5; ++i) {
-                fruits.push_back(Fruit(Vector3(0, BallHeight + 15*i, 0)));
+                blackFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::BLACK);
             }
             break;
         case HARD:
             life = 10;
+            for (int i = 0; i < 10; ++i) { // 可調整數量
+                mainFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::MAIN);
+            }
             for (int i = 0; i < 7; ++i) {
-                fruits.push_back(Fruit(Vector3(0, BallHeight + 15*i, 0)));
+                blackFruits.emplace_back(Vector3(0, BallHeight + 5*i, 0), FruitType::BLACK);
             }
             break;
     }
@@ -628,7 +677,54 @@ void checkCollisions() {
     Vector3 cameraPos = camera.m_vPosition;
     const float CATCH_DISTANCE = 1.5f;
 
-    for (auto& fruit : fruits) {
+    // 檢查主要水果
+    for (auto& fruit : mainFruits) {
+        if (fruit.IsActive()) {
+            Vector3 fruitPos = fruit.GetPosition();
+
+            // 先檢查籃子
+            float dx = fruitPos.x - basketPosition.x;
+            float dz = fruitPos.z - basketPosition.z;
+            float distToBasket = sqrt(dx * dx + dz * dz);
+
+            if (distToBasket < BASKET_RADIUS &&
+                fruitPos.y < basketPosition.y + BASKET_HEIGHT &&
+                fruitPos.y > basketPosition.y) {
+                int points = fruit.GetPoints();
+                score += points;
+                // 若有負分水果則可扣血
+                if (points < 0) {
+                    life--;
+                    if (life <= 0) {
+                        currentState = GAMEOVER;
+                        gameOverStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
+                    }
+                }
+                fruit.SetActive(false);
+                continue; // 籃子接到後，就不再判斷玩家
+            }
+
+            // 再檢查玩家碰撞
+            dx = fruitPos.x - cameraPos.x;
+            dz = fruitPos.z - cameraPos.z;
+            float distToPlayer = sqrt(dx*dx + dz*dz);
+            if (distToPlayer < CATCH_DISTANCE && fruitPos.y < cameraPos.y + 2.0f) {
+                int points = fruit.GetPoints();
+                score += points;
+                if (points < 0) {
+                    life--;
+                    if (life <= 0) {
+                        currentState = GAMEOVER;
+                        gameOverStartTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
+                    }
+                }
+                fruit.SetActive(false);
+            }
+        }
+    }
+
+    // 檢查黑球
+    for (auto& fruit : blackFruits) {
         if (fruit.IsActive()) {
             Vector3 fruitPos = fruit.GetPosition();
 
@@ -823,5 +919,14 @@ void drawBasket() {
     glDisable(GL_BLEND);
     glPopMatrix();
 }
+*/
 
--*/
+// ========================== 選單相關的按鈕處理 ========================== //
+
+// 已移除重複的 mouseMotion 函式
+
+// ========================== 完整的 drawButton 函式 ========================== //
+
+// 已在選單相關部分提供
+
+// ========================== 繼續 ========================== //
