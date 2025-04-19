@@ -35,15 +35,16 @@ A 3D ball-catching game implemented in OpenGL where players need to catch fallin
 
 ### Visual Effects
 - Textured walls
-- Semi-transparent yellow ring
-- 2-second black screen fade effect when hitting black balls
+- Semi-transparent ring for catching
+- 2-second explosion/black screen effect when hitting black balls
 - Score and life display
 - Remaining time counter
+- Menu system with buttons
 
 ## Technical Requirements
 - OpenGL
 - GLUT
-- C++ compiler
+- C++ compiler (C++17 standard)
 
 ## Building and Running
 1. Create a build directory:
@@ -64,49 +65,47 @@ A 3D ball-catching game implemented in OpenGL where players need to catch fallin
    ```
 
 ## Project Structure
-- `src/`: Source files
-  - `main.cpp`: Main game loop, OpenGL initialization, and core game logic
-  - `Fruit.cpp`: Implementation of ball objects and their behaviors
-  - `Camera.cpp`: First-person camera implementation
-  - `Vector3.cpp`: 3D vector mathematics implementation
-  - `Texture.cpp`: Texture loading and management
-  - `Text.cpp`: Text rendering utilities
 
-- `include/`: Header files
-  - `Fruit.h`: Ball class definition, including:
-    - Ball types (regular and black)
-    - Movement and collision detection
-    - Points system
-  - `Camera.h`: Camera class definition, including:
-    - View matrix calculations
-    - Movement and rotation handling
-    - First-person controls
-  - `Vector3.h`: 3D vector class with:
-    - Basic vector operations
-    - Normalization and dot product
-    - Vector mathematics utilities
-  - `Texture.h`: Texture management class with:
-    - Texture loading from BMP files
-    - OpenGL texture binding
-    - Resource management
-  - `Text.h`: Text rendering class for:
-    - Score display
-    - Menu text
-    - Game messages
+```
+BallQuest720/
+├── include/                  # Header files
+│   ├── Camera.h              # Camera viewpoint and movement
+│   ├── Fruit.h               # Ball objects and behavior
+│   ├── Text.h                # Text rendering
+│   ├── Texture.h             # Texture handling
+│   ├── Vector3.h             # 3D vector mathematics
+│   ├── shaders.h             # OpenGL shader programs
+│   └── sphere.h              # Sphere rendering
+│
+├── src/                      # Source files
+│   ├── Camera.cpp            # Camera implementation
+│   ├── Fruit.cpp             # Ball physics and rendering
+│   ├── Text.cpp              # Text display implementation
+│   ├── Texture.cpp           # Texture loading and management
+│   ├── Vector3.cpp           # Vector operations
+│   └── main.cpp              # Main game loop and core logic
+│
+├── textures/                 # Texture assets
+│   └── wall.bmp              # Wall texture
+│
+├── build/                    # Build directory (created during compilation)
+│
+└── CMakeLists.txt            # CMake build configuration
+```
 
-- `textures/`: Texture files
-  - `wall.bmp`: Wall texture for the game environment
+### Key Components
 
-- `build/`: Build directory (created during compilation)
-  - Contains compiled objects
-  - Executable file
-  - CMake generated files
-
-- `CMakeLists.txt`: CMake configuration file
-  - Project settings
-  - Compiler flags
-  - Library dependencies
-  - Build targets
+- **Camera System**: First-person camera with mouse look and keyboard movement
+- **Fruit/Ball System**: Different types of falling balls with physics and scoring
+- **Rendering**: 
+  - 3D objects (sphere, ring, walls)
+  - Texture mapping
+  - Text display for score and UI
+- **Game Logic**:
+  - Menu system with difficulty selection
+  - Collision detection
+  - Scoring mechanism
+  - Game state management
 
 ## Game Flow
 1. Start at menu screen
